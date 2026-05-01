@@ -1,47 +1,85 @@
 # quartier-bot
 
-WhatsApp-Bot für lokale Nachbarschaftskommunikation. Ermöglicht einfache Gruppen-Interaktionen, Admin-Ankündigungen und erweiterbare Befehls-Handler für Nachbarschaftsinitiativen und Quartiersprojekte.
+WhatsApp-Chatbot für das Quartier Manegg/Greencity (PLZ 8041, Zürich).
+V1 Kern-Feature: Abfallkalender — Nutzer fragen per WhatsApp nach Abholterminen,
+der Bot antwortet auf Deutsch mit echten Daten von der Stadt Zürich.
 
 ## Stack
 
 - **Runtime:** Node.js ≥ 18, TypeScript
-- **WhatsApp-Client:** `whatsapp-web.js` (Multi-Device, Session via LocalAuth)
-- **Einstiegspunkt:** `src/index.ts`
+- **WhatsApp:** Twilio Sandbox (Webhook, kein eigenständiger Client nötig)
+- **KI:** Anthropic Claude Haiku (`claude-haiku-4-5`) für natürliche deutsche Antworten
+- **Daten:** OpenERZ API (`openerz.metaodi.ch`) – offizielle Zürcher Abfalldaten, kein API-Key nötig
+- **Session:** In-Memory-Map pro Telefonnummer (kein DB nötig in V1)
+
+## Architektur
+
+```
+WhatsApp-Nutzer
+     │  POST (form-encoded)
+     ▼
+Twilio Sandbox  ──→  POST /webhook
+                         │
+                    src/routes/webhook.ts
+                         │
+              ┌──────────┼──────────┐
+              ▼          ▼          ▼
+       session.ts   openerz.ts  claude.ts
+       (ZIP-Store)  (Abfalldata) (Antwort)
+```
 
 ## Projektstruktur
 
 ```
 src/
-  bot/
-    handlers/   # Ein Handler pro Befehl
-    middleware/ # Querschnittsfunktionen (z.B. isAdmin)
-    index.ts    # Handler-Registrierung
+  routes/
+    webhook.ts        # Twilio POST-Handler, TwiML-Response
   services/
-    whatsapp.ts # Client-Factory
-  config/
-    index.ts    # Zentrale Konfiguration (aus .env)
-  index.ts      # App-Einstiegspunkt
-tests/          # Jest-Tests
-docs/           # Erweiterte Dokumentation
+    claude.ts         # Claude Haiku: Intent-Erkennung + Antworterzeugung
+    openerz.ts        # OpenERZ REST-Client (zip → Abholdaten)
+    session.ts        # In-Memory-Session pro Telefonnummer
+  utils/
+    formatter.ts      # Datums-/Textformatierung (Deutsch)
+  index.ts            # Express-App
 ```
 
-## Konfiguration
+## Konfiguration (.env)
 
-Kopiere `.env.example` nach `.env` und trage deine Werte ein.  
-Pflichtfelder: `ADMIN_NUMBERS` (kommagetrennte Rufnummern ohne `+`).
+```
+ANTHROPIC_API_KEY=sk-ant-...
+TWILIO_AUTH_TOKEN=...          # Optional: Webhook-Signaturvalidierung
+PORT=3000
+```
 
 ## Starten
 
 ```bash
 npm install
-npm run dev   # Entwicklung (ts-node)
+npm run dev        # ts-node (Entwicklung)
 npm run build && npm start  # Produktion
 ```
 
-Beim ersten Start wird ein QR-Code im Terminal angezeigt – mit WhatsApp scannen.
+Für lokale Tests Twilio-Webhook auf den lokalen Port tunneln (z.B. mit ngrok):
+```bash
+ngrok http 3000
+# → Twilio Sandbox Webhook-URL: https://<ngrok-id>.ngrok.io/webhook
+```
 
-## Neue Befehle hinzufügen
+## Gesprächsfluss
 
-1. Handler in `src/bot/handlers/<befehl>.ts` anlegen
-2. In `src/bot/index.ts` registrieren
-3. Hilfetext in `src/bot/handlers/help.ts` ergänzen
+1. Nutzer schreibt zum ersten Mal → Bot fragt nach PLZ
+2. Nutzer nennt PLZ (z.B. "8041") → Bot speichert und bestätigt
+3. Nutzer fragt nach Abfallkalender → Bot ruft OpenERZ ab, Claude formuliert Antwort
+
+## OpenERZ API
+
+- Endpoint: `https://openerz.metaodi.ch/api/calendar.json`
+- Parameter: `zip`, `types` (waste, paper, cardboard, organic, …), `start`, `end`, `limit`
+- Kein API-Key erforderlich
+- Abfalltypen für 8041/Zürich: `waste` (Kehricht), `paper` (Altpapier), `cardboard` (Karton), `organic` (Grüngut)
+
+## Neues V1-Feature hinzufügen
+
+1. Neuen Intent in `src/services/claude.ts` → `detectIntent()` ergänzen
+2. Handler in `src/routes/webhook.ts` → `handleMessage()` ergänzen
+3. Bei Bedarf neuen OpenERZ-Query in `src/services/openerz.ts`

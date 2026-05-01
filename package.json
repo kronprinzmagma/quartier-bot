@@ -1,18 +1,17 @@
 {
   "name": "quartier-bot",
   "version": "0.1.0",
-  "description": "WhatsApp-Bot für lokale Nachbarschaftskommunikation",
+  "description": "WhatsApp-Bot für Quartier Manegg/Greencity – Abfallkalender und mehr",
   "main": "dist/index.js",
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
     "dev": "ts-node src/index.ts",
     "test": "jest",
-    "lint": "eslint src/**/*.ts"
+    "lint": "eslint 'src/**/*.ts'"
   },
   "dependencies": {
-    "whatsapp-web.js": "^1.23.0",
-    "qrcode-terminal": "^0.12.0",
+    "@anthropic-ai/sdk": "^0.39.0",
     "dotenv": "^16.4.5",
     "express": "^4.18.3"
   },
